@@ -17,6 +17,7 @@ package io.netty5.channel.epoll;
 
 import io.netty5.buffer.api.Buffer;
 import io.netty5.buffer.api.BufferAllocator;
+import io.netty5.channel.ChannelShutdownDirection;
 import io.netty5.util.Resource;
 import io.netty5.channel.Channel;
 import io.netty5.channel.ChannelConfig;
@@ -32,16 +33,12 @@ import io.netty5.channel.socket.DuplexChannel;
 import io.netty5.channel.unix.IovArray;
 import io.netty5.channel.unix.SocketWritableByteChannel;
 import io.netty5.channel.unix.UnixChannelUtil;
-import io.netty5.util.concurrent.Future;
-import io.netty5.util.concurrent.Promise;
 import io.netty5.util.internal.StringUtil;
-import io.netty5.util.internal.UnstableApi;
-import io.netty5.util.internal.logging.InternalLogger;
-import io.netty5.util.internal.logging.InternalLoggerFactory;
 
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.channels.NotYetConnectedException;
 import java.nio.channels.WritableByteChannel;
 import java.util.concurrent.Executor;
 
@@ -53,7 +50,6 @@ public abstract class AbstractEpollStreamChannel extends AbstractEpollChannel im
     private static final String EXPECTED_TYPES =
             " (expected: " + StringUtil.simpleClassName(Buffer.class) + ", " +
                     StringUtil.simpleClassName(DefaultFileRegion.class) + ')';
-    private static final InternalLogger logger = InternalLoggerFactory.getInstance(AbstractEpollStreamChannel.class);
     private final Runnable flushTask = () -> {
         // Calling flush0 directly to ensure we not try to flush messages that were added via write(...) in the
         // meantime.
@@ -398,115 +394,37 @@ public abstract class AbstractEpollStreamChannel extends AbstractEpollChannel im
                 "unsupported message type: " + StringUtil.simpleClassName(msg) + EXPECTED_TYPES);
     }
 
-    @UnstableApi
     @Override
-    protected final void doShutdownOutput() throws Exception {
-        socket.shutdown(false, true);
-    }
-
-    private void shutdownInput0(Promise<Void> promise) {
-        try {
-            socket.shutdown(true, false);
-            promise.setSuccess(null);
-        } catch (Throwable cause) {
-            promise.setFailure(cause);
+    protected void doShutdown(ChannelShutdownDirection direction) throws Exception {
+        switch (direction) {
+            case Outbound:
+                socket.shutdown(false, true);
+                break;
+            case Inbound:
+                try {
+                    socket.shutdown(true, false);
+                } catch (NotYetConnectedException ignore) {
+                    // We attempted to shutdown and failed, which means the input has already effectively been
+                    // shutdown.
+                }
+                break;
+            default:
+                throw new IllegalStateException();
         }
     }
 
     @Override
-    public boolean isOutputShutdown() {
-        return socket.isOutputShutdown();
-    }
-
-    @Override
-    public boolean isInputShutdown() {
-        return socket.isInputShutdown();
-    }
-
-    @Override
-    public boolean isShutdown() {
-        return socket.isShutdown();
-    }
-
-    @Override
-    public Future<Void> shutdownOutput() {
-        return shutdownOutput(newPromise());
-    }
-
-    @Override
-    public Future<Void> shutdownOutput(final Promise<Void> promise) {
-        EventLoop loop = executor();
-        if (loop.inEventLoop()) {
-            ((AbstractUnsafe) unsafe()).shutdownOutput(promise);
-        } else {
-            loop.execute(() -> ((AbstractUnsafe) unsafe()).shutdownOutput(promise));
+    public boolean isShutdown(ChannelShutdownDirection direction) {
+        if (!isActive()) {
+            return true;
         }
-
-        return promise.asFuture();
-    }
-
-    @Override
-    public Future<Void> shutdownInput() {
-        return shutdownInput(newPromise());
-    }
-
-    @Override
-    public Future<Void> shutdownInput(final Promise<Void> promise) {
-        Executor closeExecutor = ((EpollStreamUnsafe) unsafe()).prepareToClose();
-        if (closeExecutor != null) {
-            closeExecutor.execute(() -> shutdownInput0(promise));
-        } else {
-            EventLoop loop = executor();
-            if (loop.inEventLoop()) {
-                shutdownInput0(promise);
-            } else {
-                loop.execute(() -> shutdownInput0(promise));
-            }
-        }
-        return promise.asFuture();
-    }
-
-    @Override
-    public Future<Void> shutdown() {
-        return shutdown(newPromise());
-    }
-
-    @Override
-    public Future<Void> shutdown(Promise<Void> promise) {
-        Future<Void> shutdownOutputFuture = shutdownOutput();
-        if (shutdownOutputFuture.isDone()) {
-            shutdownOutputDone(promise, shutdownOutputFuture);
-        } else {
-            shutdownOutputFuture.addListener(promise, this::shutdownOutputDone);
-        }
-        return promise.asFuture();
-    }
-
-    private void shutdownOutputDone(Promise<Void> promise, Future<?> shutdownOutputFuture) {
-        Future<Void> shutdownInputFuture = shutdownInput();
-        if (shutdownInputFuture.isDone()) {
-            shutdownDone(shutdownOutputFuture, shutdownInputFuture, promise);
-        } else {
-            shutdownInputFuture.addListener(shutdownInputFuture1 ->
-                    shutdownDone(shutdownOutputFuture, shutdownInputFuture1, promise));
-        }
-    }
-
-    private static void shutdownDone(Future<?> shutdownOutputFuture,
-                              Future<?> shutdownInputFuture,
-                              Promise<Void> promise) {
-        Throwable shutdownOutputCause = shutdownOutputFuture.cause();
-        Throwable shutdownInputCause = shutdownInputFuture.cause();
-        if (shutdownOutputCause != null) {
-            if (shutdownInputCause != null) {
-                logger.debug("Exception suppressed because a previous exception occurred.",
-                        shutdownInputCause);
-            }
-            promise.setFailure(shutdownOutputCause);
-        } else if (shutdownInputCause != null) {
-            promise.setFailure(shutdownInputCause);
-        } else {
-            promise.setSuccess(null);
+        switch (direction) {
+            case Outbound:
+                return socket.isOutputShutdown();
+            case Inbound:
+                return socket.isInputShutdown();
+            default:
+                throw new IllegalStateException();
         }
     }
 
@@ -595,7 +513,7 @@ public abstract class AbstractEpollStreamChannel extends AbstractEpollChannel im
                         //   was "wrapped" by this Channel implementation.
                         break;
                     }
-                } while (recvAlloc.continueReading());
+                } while (recvAlloc.continueReading() && !isShutdown(ChannelShutdownDirection.Inbound));
 
                 recvAlloc.readComplete();
                 pipeline.fireChannelReadComplete();

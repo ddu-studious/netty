@@ -20,8 +20,8 @@ import io.netty5.buffer.api.Buffer;
 import io.netty5.channel.Channel;
 import io.netty5.channel.ChannelHandlerContext;
 import io.netty5.channel.ChannelOption;
+import io.netty5.channel.ChannelShutdownDirection;
 import io.netty5.channel.SimpleChannelInboundHandler;
-import io.netty5.channel.socket.ChannelInputShutdownEvent;
 import io.netty5.channel.socket.DuplexChannel;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInfo;
@@ -62,8 +62,8 @@ public abstract class AbstractSocketShutdownOutputByPeerTest<Socket> extends Abs
 
             assertTrue(h.ch.isOpen());
             assertTrue(h.ch.isActive());
-            assertFalse(h.ch.isInputShutdown());
-            assertFalse(h.ch.isOutputShutdown());
+            assertFalse(h.ch.isShutdown(ChannelShutdownDirection.Inbound));
+            assertFalse(h.ch.isShutdown(ChannelShutdownDirection.Outbound));
 
             shutdownOutput(s);
 
@@ -71,8 +71,8 @@ public abstract class AbstractSocketShutdownOutputByPeerTest<Socket> extends Abs
 
             assertTrue(h.ch.isOpen());
             assertTrue(h.ch.isActive());
-            assertTrue(h.ch.isInputShutdown());
-            assertFalse(h.ch.isOutputShutdown());
+            assertTrue(h.ch.isShutdown(ChannelShutdownDirection.Inbound));
+            assertFalse(h.ch.isShutdown(ChannelShutdownDirection.Outbound));
 
             while (h.closure.getCount() != 1 && h.halfClosureCount.intValue() != 1) {
                 Thread.sleep(100);
@@ -105,8 +105,8 @@ public abstract class AbstractSocketShutdownOutputByPeerTest<Socket> extends Abs
 
             assertTrue(h.ch.isOpen());
             assertTrue(h.ch.isActive());
-            assertFalse(h.ch.isInputShutdown());
-            assertFalse(h.ch.isOutputShutdown());
+            assertFalse(h.ch.isShutdown(ChannelShutdownDirection.Inbound));
+            assertFalse(h.ch.isShutdown(ChannelShutdownDirection.Outbound));
 
             shutdownOutput(s);
 
@@ -114,8 +114,8 @@ public abstract class AbstractSocketShutdownOutputByPeerTest<Socket> extends Abs
 
             assertFalse(h.ch.isOpen());
             assertFalse(h.ch.isActive());
-            assertTrue(h.ch.isInputShutdown());
-            assertTrue(h.ch.isOutputShutdown());
+            assertTrue(h.ch.isShutdown(ChannelShutdownDirection.Inbound));
+            assertTrue(h.ch.isShutdown(ChannelShutdownDirection.Outbound));
 
             while (h.halfClosure.getCount() != 1 && h.halfClosureCount.intValue() != 0) {
                 Thread.sleep(100);
@@ -161,8 +161,8 @@ public abstract class AbstractSocketShutdownOutputByPeerTest<Socket> extends Abs
         }
 
         @Override
-        public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
-            if (evt instanceof ChannelInputShutdownEvent) {
+        public void channelShutdown(ChannelHandlerContext ctx, ChannelShutdownDirection direction) throws Exception {
+            if (direction == ChannelShutdownDirection.Inbound) {
                 halfClosureCount.incrementAndGet();
                 halfClosure.countDown();
             }

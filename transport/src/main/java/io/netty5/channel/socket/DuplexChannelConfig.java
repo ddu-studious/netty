@@ -19,6 +19,7 @@ import io.netty.buffer.ByteBufAllocator;
 import io.netty5.channel.ChannelConfig;
 import io.netty5.channel.ChannelHandlerContext;
 import io.netty5.channel.ChannelOption;
+import io.netty5.channel.ChannelShutdownDirection;
 import io.netty5.channel.MessageSizeEstimator;
 import io.netty5.channel.RecvBufferAllocator;
 import io.netty5.channel.WriteBufferWaterMark;
@@ -48,11 +49,10 @@ public interface DuplexChannelConfig extends ChannelConfig {
 
     /**
      * Sets whether the channel should not close itself when its remote peer shuts down output to
-     * make the connection half-closed.  If {@code true} the connection is not closed when the
+     * make the connection half-closed. If {@code true} the connection is not closed when the
      * remote peer shuts down output. Instead,
-     * {@link io.netty5.channel.ChannelHandler#userEventTriggered(ChannelHandlerContext, Object)}
-     * is invoked with a {@link ChannelInputShutdownEvent} object. If {@code false}, the connection
-     * is closed automatically.
+     * {@link io.netty5.channel.ChannelHandler#channelShutdown(ChannelHandlerContext, ChannelShutdownDirection)}
+     * If {@code false}, the connection is closed automatically.
      */
     DuplexChannelConfig setAllowHalfClosure(boolean allowHalfClosure);
 

@@ -20,6 +20,7 @@ import io.netty5.channel.Channel;
 import io.netty5.channel.ChannelConfig;
 import io.netty5.channel.ChannelHandler;
 import io.netty5.channel.ChannelHandlerContext;
+import io.netty5.channel.ChannelShutdownDirection;
 import io.netty5.channel.EventLoop;
 import io.netty5.util.ReferenceCounted;
 import io.netty5.util.concurrent.Future;
@@ -152,36 +153,20 @@ public class Http2MultiplexCodec extends Http2FrameCodec {
     final void onHttp2StreamStateChanged(ChannelHandlerContext ctx, DefaultHttp2FrameStream stream) {
         switch (stream.state()) {
             case HALF_CLOSED_LOCAL:
-                if (stream.id() != HTTP_UPGRADE_STREAM_ID) {
-                    // Ignore everything which was not caused by an upgrade
-                    break;
+                // Ignore everything which was not caused by an upgrade
+                if (stream.id() == HTTP_UPGRADE_STREAM_ID) {
+                    createStreamChannelIfNeeded(stream, false);
                 }
-                // fall-through
+                break;
             case HALF_CLOSED_REMOTE:
-                // fall-through
-            case OPEN:
                 if (stream.attachment != null) {
-                    // ignore if child channel was already created.
-                    break;
-                }
-                final Http2MultiplexCodecStreamChannel streamChannel;
-                // We need to handle upgrades special when on the client side.
-                if (stream.id() == HTTP_UPGRADE_STREAM_ID && !connection().isServer()) {
-                    // Add our upgrade handler to the channel and then register the channel.
-                    // The register call fires the channelActive, etc.
-                    assert upgradeStreamHandler != null;
-                    streamChannel = new Http2MultiplexCodecStreamChannel(stream, upgradeStreamHandler);
-                    streamChannel.closeOutbound();
+                    stream.attachment.shutdown(ChannelShutdownDirection.Inbound);
                 } else {
-                    streamChannel = new Http2MultiplexCodecStreamChannel(stream, inboundStreamHandler);
+                    createStreamChannelIfNeeded(stream, true);
                 }
-
-                Future<Void> future = streamChannel.register();
-                if (future.isDone()) {
-                    Http2MultiplexHandler.registerDone(streamChannel, future);
-                } else {
-                    future.addListener(streamChannel, Http2MultiplexHandler.CHILD_CHANNEL_REGISTRATION_LISTENER);
-                }
+                break;
+            case OPEN:
+                createStreamChannelIfNeeded(stream, false);
                 break;
             case CLOSED:
                 AbstractHttp2StreamChannel channel = (AbstractHttp2StreamChannel) stream.attachment;
@@ -192,6 +177,35 @@ public class Http2MultiplexCodec extends Http2FrameCodec {
             default:
                 // ignore for now
                 break;
+        }
+    }
+
+    private void createStreamChannelIfNeeded(DefaultHttp2FrameStream stream, boolean shutdownInputOnceRegistered) {
+        if (stream.attachment != null) {
+            // ignore if child channel was already created.
+            return;
+        }
+        final Http2MultiplexCodecStreamChannel streamChannel;
+        // We need to handle upgrades special when on the client side.
+        if (stream.id() == HTTP_UPGRADE_STREAM_ID && !connection().isServer()) {
+            // Add our upgrade handler to the channel and then register the channel.
+            // The register call fires the channelActive, etc.
+            assert upgradeStreamHandler != null;
+            streamChannel = new Http2MultiplexCodecStreamChannel(stream, upgradeStreamHandler);
+            streamChannel.closeOutbound();
+        } else {
+            streamChannel = new Http2MultiplexCodecStreamChannel(stream, inboundStreamHandler);
+        }
+
+        Future<Void> future = streamChannel.register();
+        if (future.isDone()) {
+            Http2MultiplexHandler.registerDoneShutdown(streamChannel, future, shutdownInputOnceRegistered);
+        } else {
+            if (shutdownInputOnceRegistered) {
+                future.addListener(streamChannel, Http2MultiplexHandler.CHILD_CHANNEL_SHUTDOWN_REGISTRATION_LISTENER);
+            } else {
+                future.addListener(streamChannel, Http2MultiplexHandler.CHILD_CHANNEL_REGISTRATION_LISTENER);
+            }
         }
     }
 

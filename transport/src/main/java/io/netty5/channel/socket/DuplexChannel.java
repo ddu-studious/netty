@@ -25,59 +25,6 @@ import java.net.Socket;
  * A duplex {@link Channel} that has two sides that can be shutdown independently.
  */
 public interface DuplexChannel extends Channel {
-    /**
-     * Returns {@code true} if and only if the remote peer shut down its output so that no more
-     * data is received from this channel.  Note that the semantic of this method is different from
-     * that of {@link Socket#shutdownInput()} and {@link Socket#isInputShutdown()}.
-     */
-    boolean isInputShutdown();
-
-    /**
-     * @see Socket#shutdownInput()
-     */
-    Future<Void> shutdownInput();
-
-    /**
-     * Will shutdown the input and notify {@link Promise}.
-     *
-     * @see Socket#shutdownInput()
-     */
-    Future<Void> shutdownInput(Promise<Void> promise);
-
-    /**
-     * @see Socket#isOutputShutdown()
-     */
-    boolean isOutputShutdown();
-
-    /**
-     * @see Socket#shutdownOutput()
-     */
-    Future<Void> shutdownOutput();
-
-    /**
-     * Will shutdown the output and notify {@link Promise}.
-     *
-     * @see Socket#shutdownOutput()
-     */
-    Future<Void> shutdownOutput(Promise<Void> promise);
-
-    /**
-     * Determine if both the input and output of this channel have been shutdown.
-     */
-    boolean isShutdown();
-
-    /**
-     * Will shutdown the input and output sides of this channel.
-     * @return will be completed when both shutdown operations complete.
-     */
-    Future<Void> shutdown();
-
-    /**
-     * Will shutdown the input and output sides of this channel.
-     * @param promise will be completed when both shutdown operations complete.
-     * @return will be completed when both shutdown operations complete.
-     */
-    Future<Void> shutdown(Promise<Void> promise);
 
     @Override
     DuplexChannelConfig config();
