@@ -28,7 +28,6 @@ import io.netty5.channel.DefaultFileRegion;
 import io.netty5.channel.EventLoop;
 import io.netty5.channel.FileRegion;
 import io.netty5.channel.internal.ChannelUtils;
-import io.netty5.channel.socket.DuplexChannel;
 import io.netty5.channel.unix.IovArray;
 import io.netty5.channel.unix.SocketWritableByteChannel;
 import io.netty5.channel.unix.UnixChannelUtil;
@@ -46,7 +45,7 @@ import static io.netty5.channel.internal.ChannelUtils.MAX_BYTES_PER_GATHERING_WR
 import static io.netty5.channel.internal.ChannelUtils.WRITE_STATUS_SNDBUF_FULL;
 
 @UnstableApi
-public abstract class AbstractKQueueStreamChannel extends AbstractKQueueChannel implements DuplexChannel {
+public abstract class AbstractKQueueStreamChannel extends AbstractKQueueChannel {
     private static final ChannelMetadata METADATA = new ChannelMetadata(false, 16);
     private static final String EXPECTED_TYPES =
             " (expected: " + StringUtil.simpleClassName(Buffer.class) + ", " +
@@ -76,7 +75,7 @@ public abstract class AbstractKQueueStreamChannel extends AbstractKQueueChannel 
     }
 
     @Override
-    public abstract KQueueDuplexChannelConfig config();
+    public abstract KQueueChannelConfig config();
 
     @Override
     public ChannelMetadata metadata() {

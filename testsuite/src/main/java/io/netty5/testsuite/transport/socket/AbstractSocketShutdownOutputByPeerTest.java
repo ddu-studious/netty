@@ -22,7 +22,6 @@ import io.netty5.channel.ChannelHandlerContext;
 import io.netty5.channel.ChannelOption;
 import io.netty5.channel.ChannelShutdownDirection;
 import io.netty5.channel.SimpleChannelInboundHandler;
-import io.netty5.channel.socket.DuplexChannel;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInfo;
 import org.junit.jupiter.api.Timeout;
@@ -139,7 +138,7 @@ public abstract class AbstractSocketShutdownOutputByPeerTest<Socket> extends Abs
     protected abstract Socket newSocket();
 
     private static class TestHandler extends SimpleChannelInboundHandler<Buffer> {
-        volatile DuplexChannel ch;
+        volatile Channel ch;
         final BlockingQueue<Byte> queue = new LinkedBlockingQueue<>();
         final CountDownLatch halfClosure = new CountDownLatch(1);
         final CountDownLatch closure = new CountDownLatch(1);
@@ -147,7 +146,7 @@ public abstract class AbstractSocketShutdownOutputByPeerTest<Socket> extends Abs
 
         @Override
         public void channelActive(ChannelHandlerContext ctx) throws Exception {
-            ch = (DuplexChannel) ctx.channel();
+            ch = ctx.channel();
         }
 
         @Override
